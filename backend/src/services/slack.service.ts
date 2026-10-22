@@ -1,10 +1,12 @@
 import { prisma } from '../db/prisma.js';
+import { redisClient } from '../config/redis.js';
 import { logger } from '../config/logger.js';
 import { env } from '../config/env.js';
 
 export interface SlackRateLimitAlertData {
   userId: string;
   senderEmail: string;
+  senderId?: string;
   limit: number;
   currentCount: number;
   nextWindowDate: Date;
@@ -14,9 +16,29 @@ export interface SlackRateLimitAlertData {
 export class SlackService {
   /**
    * Send an alert notification to Slack when a sender hits the hourly rate limit.
+   * Throttled using Redis to send once per sender per hour window, not once per job.
    * If Slack is not connected, fails silently and gracefully without breaking the scheduling flow.
    */
   public static async notifyRateLimitExceeded(data: SlackRateLimitAlertData): Promise<boolean> {
+    const senderIdentifier = data.senderId || data.senderEmail || data.userId;
+    const now = Date.now();
+    const currentHourWindow = Math.floor(now / 3600000) * 3600000;
+    const alertThrottleKey = `alert:slack:hourly:${senderIdentifier}:${currentHourWindow}`;
+
+    try {
+      // Throttle: Send alert at most once per sender per hour window
+      const acquired = await redisClient.set(alertThrottleKey, '1', 'EX', 7200, 'NX');
+      if (!acquired) {
+        logger.debug(
+          { senderIdentifier, currentHourWindow },
+          'Slack rate limit alert already sent for this sender in this hour window; throttling'
+        );
+        return false;
+      }
+    } catch (err) {
+      logger.warn({ err, senderIdentifier }, 'Failed to check Slack alert throttle key in Redis');
+    }
+
     try {
       const connection = await prisma.slackConnection.findFirst({
         where: { userId: data.userId },

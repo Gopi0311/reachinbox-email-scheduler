@@ -35,6 +35,3 @@ authRouter.get('/me', requireAuth, AuthController.getCurrentUser);
 
 // Logout
 authRouter.post('/logout', AuthController.logout);
-
-// Dev / Test convenience login (for environments without Google OAuth credentials configured)
-authRouter.post('/dev-login', AuthController.devLogin);

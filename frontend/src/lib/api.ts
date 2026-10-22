@@ -26,11 +26,6 @@ async function fetcher<T>(endpoint: string, options: RequestInit = {}): Promise<
 export const api = {
   auth: {
     me: () => fetcher<User>('/auth/me'),
-    devLogin: (email?: string, name?: string) =>
-      fetcher<User>('/auth/dev-login', {
-        method: 'POST',
-        body: JSON.stringify({ email, name }),
-      }),
     logout: () =>
       fetcher<{ message: string }>('/auth/logout', {
         method: 'POST',

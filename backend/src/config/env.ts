@@ -33,12 +33,12 @@ const envSchema = z.object({
   ETHEREAL_PASSWORD: z.string().optional().default(''),
 
   // Google OAuth
-  GOOGLE_CLIENT_ID: z.string().default('mock-google-client-id'),
-  GOOGLE_CLIENT_SECRET: z.string().default('mock-google-client-secret'),
+  GOOGLE_CLIENT_ID: z.string({ required_error: 'GOOGLE_CLIENT_ID is required' }).min(1, 'GOOGLE_CLIENT_ID cannot be empty'),
+  GOOGLE_CLIENT_SECRET: z.string({ required_error: 'GOOGLE_CLIENT_SECRET is required' }).min(1, 'GOOGLE_CLIENT_SECRET cannot be empty'),
 
   // Slack OAuth
-  SLACK_CLIENT_ID: z.string().default('mock-slack-client-id'),
-  SLACK_CLIENT_SECRET: z.string().default('mock-slack-client-secret'),
+  SLACK_CLIENT_ID: z.string({ required_error: 'SLACK_CLIENT_ID is required' }).min(1, 'SLACK_CLIENT_ID cannot be empty'),
+  SLACK_CLIENT_SECRET: z.string({ required_error: 'SLACK_CLIENT_SECRET is required' }).min(1, 'SLACK_CLIENT_SECRET cannot be empty'),
 });
 
 const parsed = envSchema.safeParse(process.cwd() ? process.env : {});

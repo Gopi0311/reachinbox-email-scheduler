@@ -47,7 +47,7 @@ export class ReconciliationService {
         }
       }
 
-      // 2. Find all SCHEDULED and RESCHEDULED jobs in DB
+      // 2. Find all SCHEDULED and RESCHEDULED ("rate_limited") jobs in DB
       const pendingJobs = await prisma.emailJob.findMany({
         where: {
           status: { in: [EmailJobStatus.SCHEDULED, EmailJobStatus.RESCHEDULED] },
@@ -57,9 +57,36 @@ export class ReconciliationService {
 
       for (const job of pendingJobs) {
         const existingBullJob = await getBullMQJob(job.id);
+        let hasActiveJobInQueue = false;
 
-        // If job does not exist in BullMQ, re-enqueue it
-        if (!existingBullJob) {
+        if (existingBullJob) {
+          try {
+            const state =
+              typeof existingBullJob.getState === 'function'
+                ? await existingBullJob.getState()
+                : 'active';
+            if (
+              state === 'delayed' ||
+              state === 'waiting' ||
+              state === 'active' ||
+              state === 'prioritized'
+            ) {
+              hasActiveJobInQueue = true;
+            } else {
+              // Job was marked completed/failed in BullMQ, but DB is still scheduled/rescheduled.
+              // Remove the old completed/failed job so it can be re-enqueued clean.
+              if (typeof existingBullJob.remove === 'function') {
+                await existingBullJob.remove().catch(() => {});
+              }
+            }
+          } catch {
+            hasActiveJobInQueue = false;
+          }
+        }
+
+        // If job has no active/delayed/waiting job in BullMQ, re-queue it.
+        // If scheduledAt is already in the past, add with delay 0 so it sends immediately.
+        if (!hasActiveJobInQueue) {
           const now = Date.now();
           const targetTime = job.scheduledAt.getTime();
           const delayMs = Math.max(0, targetTime - now);

@@ -1,35 +1,15 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import React from 'react';
 import { Button } from '@/components/ui/Button';
-import { api } from '@/lib/api';
-import { useToast } from '@/components/ui/Toast';
-import { Mail, CheckCircle2, ShieldCheck, Zap, Server, Database } from 'lucide-react';
+import { Mail, CheckCircle2, ShieldCheck, Server, Database } from 'lucide-react';
 
 export default function LoginPage() {
-  const router = useRouter();
-  const { error, success } = useToast();
-  const [isDevLoggingIn, setIsDevLoggingIn] = useState(false);
-
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
   const handleGoogleLogin = () => {
     // Redirect directly to the backend Google OAuth endpoint
     window.location.href = `${backendUrl}/auth/google`;
-  };
-
-  const handleDevLogin = async () => {
-    try {
-      setIsDevLoggingIn(true);
-      await api.auth.devLogin('intern.evaluator@reachinbox.ai', 'ReachInbox Evaluator');
-      success('Logged in as Evaluator!');
-      router.push('/dashboard');
-    } catch (err: any) {
-      error(err.message || 'Dev login failed');
-    } finally {
-      setIsDevLoggingIn(false);
-    }
   };
 
   return (
@@ -91,29 +71,6 @@ export default function LoginPage() {
               />
             </svg>
             <span className="font-semibold text-slate-200">Sign in with Google</span>
-          </Button>
-
-          {/* Quick Dev/Evaluation Login */}
-          <div className="relative py-2">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-white/[0.08]" />
-            </div>
-            <div className="relative flex justify-center text-[10px] uppercase tracking-wider font-bold">
-              <span className="bg-[#0D0F18] px-3 text-slate-500">
-                Or evaluation mode
-              </span>
-            </div>
-          </div>
-
-          <Button
-            onClick={handleDevLogin}
-            variant="gradient"
-            size="lg"
-            isLoading={isDevLoggingIn}
-            className="w-full py-3 shadow-lg shadow-indigo-500/25"
-          >
-            <Zap className="w-4 h-4 mr-2" />
-            One-Click Evaluator Sign-In
           </Button>
         </div>
 

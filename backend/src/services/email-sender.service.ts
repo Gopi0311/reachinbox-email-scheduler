@@ -1,11 +1,11 @@
 import nodemailer from 'nodemailer';
+import { DelayedError } from 'bullmq';
 import { prisma } from '../db/prisma.js';
 import { getEmailTransporter } from '../config/email.js';
 import { logger } from '../config/logger.js';
 import { RateLimiterService } from './rate-limiter.service.js';
 import { ElasticsearchService } from './elasticsearch.service.js';
 import { SlackService } from './slack.service.js';
-import { addDelayedEmailJob } from '../queues/email.queue.js';
 import { EmailJobData } from '../types/index.js';
 import { EmailJob, EmailJobStatus, Prisma } from '@prisma/client';
 
@@ -15,7 +15,7 @@ export type ClaimedEmailJob = Prisma.EmailJobGetPayload<{
 
 export type SendResult =
   | { status: 'already_processed' }
-  | { status: 'rescheduled'; retryAfterMs: number }
+  | { status: 'rescheduled'; delayTimestamp: number; retryAfterMs: number }
   | { status: 'sent'; messageId: string; previewUrl: string | null }
   | { status: 'failed'; error: string };
 
@@ -100,40 +100,40 @@ export class EmailSenderService {
 
       // 4. If rate limit is exceeded, RESCHEDULE instead of dropping or failing!
       if (!rateLimitResult.allowed) {
-        const retryAfterMs = rateLimitResult.retryAfterMs || 3600000;
-        const newScheduledAt = new Date(Date.now() + retryAfterMs);
+        // Compute target timestamp for start of next hour window + per-job offset (preserves order)
+        const delayTimestamp = await RateLimiterService.calculateNextWindowTimestamp(
+          effectiveSenderId,
+          minDelayMs
+        );
+        const newScheduledAt = new Date(delayTimestamp);
+        const retryAfterMs = Math.max(1000, delayTimestamp - Date.now());
 
-        // Revert status to RESCHEDULED in DB
+        // Update DB row: status stays scheduled/rescheduled and scheduledAt = new timestamp
+        // Crucial: this status can NEVER become "failed"!
         const rescheduledJob = await prisma.emailJob.update({
           where: { id: jobId },
           data: {
             status: EmailJobStatus.RESCHEDULED,
             scheduledAt: newScheduledAt,
+            error: null,
           },
         });
-
-        // Re-enqueue delayed job in BullMQ
-        await addDelayedEmailJob(
-          {
-            ...jobData,
-            scheduledTime: newScheduledAt.getTime(),
-          },
-          retryAfterMs
-        );
 
         logger.info(
           {
             jobId,
             toEmail,
+            delayTimestamp,
             retryAfterMs,
             rescheduledTo: newScheduledAt.toISOString(),
           },
           'Email job rescheduled to next hour window due to rate limit'
         );
 
-        // Notify via Slack if configured
+        // Notify via Slack if configured (throttled to once per sender per hour window)
         await SlackService.notifyRateLimitExceeded({
           userId,
+          senderId: effectiveSenderId,
           senderEmail,
           limit: hourlyLimit,
           currentCount: rateLimitResult.currentCount,
@@ -143,7 +143,7 @@ export class EmailSenderService {
         // Update Elasticsearch with rescheduled status
         await ElasticsearchService.indexEmailJob(rescheduledJob);
 
-        return { status: 'rescheduled', retryAfterMs };
+        return { status: 'rescheduled', delayTimestamp, retryAfterMs };
       }
 
       // 5. Send email via Ethereal SMTP
@@ -196,6 +196,32 @@ export class EmailSenderService {
         previewUrl: previewUrl ? String(previewUrl) : null,
       };
     } catch (error: any) {
+      if (error instanceof DelayedError || error?.name === 'DelayedError') {
+        throw error;
+      }
+
+      // Check if job was already rescheduled or scheduled - this status must NEVER become "failed"
+      try {
+        const currentJob = await prisma.emailJob.findUnique({ where: { id: jobId } });
+        if (
+          currentJob?.status === EmailJobStatus.RESCHEDULED ||
+          currentJob?.status === EmailJobStatus.SCHEDULED
+        ) {
+          logger.info(
+            { jobId, status: currentJob.status },
+            'Job is currently scheduled/rescheduled; preserving non-failed status'
+          );
+          const ts = currentJob.scheduledAt.getTime();
+          return {
+            status: 'rescheduled',
+            delayTimestamp: ts,
+            retryAfterMs: Math.max(1000, ts - Date.now()),
+          };
+        }
+      } catch (checkErr) {
+        logger.warn({ checkErr, jobId }, 'Error checking job status in catch block');
+      }
+
       logger.error({ error: error.message, jobId, toEmail }, 'Failed to deliver email');
 
       // Update DB record to FAILED

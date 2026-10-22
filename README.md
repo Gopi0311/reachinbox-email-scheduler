@@ -129,7 +129,7 @@ ReachInbox.ai/
 ├── backend/
 │   ├── prisma/
 │   │   ├── schema.prisma           # Prisma PostgreSQL schema
-│   │   └── seed.ts                 # Database seeder (evaluator user & sample jobs)
+│   │   └── seed.ts                 # Database seeder (sample user & sample jobs)
 │   ├── src/
 │   │   ├── config/                 # Zod env, Redis, ES, Ethereal, Passport, Logger
 │   │   ├── db/                     # Prisma Client initialization
@@ -154,7 +154,7 @@ ReachInbox.ai/
     │   ├── app/
     │   │   ├── layout.tsx          # Root layout with ToastProvider
     │   │   ├── page.tsx            # Auth route redirector
-    │   │   ├── login/page.tsx      # Google Sign-in & Evaluation login
+    │   │   ├── login/page.tsx      # Google Sign-in
     │   │   └── dashboard/page.tsx  # Interactive scheduler dashboard
     │   ├── components/             # Header, StatsCards, ComposeModal, Tables, SlackCard
     │   │   └── ui/                 # Button, Input, Modal, Tabs, Toast, Spinner, EmptyState
@@ -268,7 +268,6 @@ docker ps
    http://localhost:5000/auth/google/callback
    ```
 4. Copy `Client ID` and `Client Secret` into `backend/.env`.
-> 💡 *Note:* If you do not have Google credentials ready, click the **"One-Click Evaluator Sign-In"** button on the login page to immediately test the full authenticated flow.
 
 ### Slack OAuth & Incoming Webhooks
 1. Create a new Slack App at [api.slack.com/apps](https://api.slack.com/apps).
@@ -315,7 +314,7 @@ npm test
 
 | Step | Action | Expected Result |
 |---|---|---|
-| **1. Authentication** | Open `http://localhost:3000` and sign in (Google or Evaluator login). | Redirected to `/dashboard` displaying avatar, user email, and metrics. |
+| **1. Authentication** | Open `http://localhost:3000` and sign in with Google. | Redirected to `/dashboard` displaying avatar, user email, and metrics. |
 | **2. Queue UI** | Click **"Bull Board"** in the top navigation. | Opens `http://localhost:5000/admin/queues` showing BullMQ queue state. |
 | **3. Schedule Emails** | Click **"Compose Email"** → Load 10 sample emails → Set 2s delay → Click **Schedule**. | 10 delayed jobs are created in BullMQ and appear in the "Scheduled Queue" tab. |
 | **4. Live Execution** | Watch the dashboard without refreshing (polling runs every 5s). | Delayed jobs count down, get processed one-by-one with 2s spacing, and move to "Sent Emails". |

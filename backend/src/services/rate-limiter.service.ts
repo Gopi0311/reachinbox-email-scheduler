@@ -150,8 +150,37 @@ export class RateLimiterService {
   public static async resetSenderRateLimit(senderId: string): Promise<void> {
     const now = Date.now();
     const currentHourWindow = Math.floor(now / 3600000) * 3600000;
+    const nextHourWindow = currentHourWindow + 3600000;
     const key = `rate:hourly:${senderId}:${currentHourWindow}`;
     const lastSendKey = `rate:last_send:${senderId}`;
-    await redisClient.del(key, lastSendKey);
+    const offsetKey = `rate:reschedule_offset:${senderId}:${nextHourWindow}`;
+    await redisClient.del(key, lastSendKey, offsetKey);
+  }
+
+  /**
+   * Calculates the target timestamp for rescheduling when the hourly limit is exceeded:
+   * start of the next available hour window plus a small per-job offset so original order is preserved.
+   */
+  public static async calculateNextWindowTimestamp(
+    senderId: string,
+    minDelayMs: number = 2000
+  ): Promise<number> {
+    const now = Date.now();
+    const currentHourWindow = Math.floor(now / 3600000) * 3600000;
+    const nextHourWindow = currentHourWindow + 3600000;
+    const offsetKey = `rate:reschedule_offset:${senderId}:${nextHourWindow}`;
+
+    try {
+      const offsetIndex = await redisClient.incr(offsetKey);
+      if (offsetIndex === 1) {
+        await redisClient.expire(offsetKey, 7200);
+      }
+      const delayStep = minDelayMs > 0 ? minDelayMs : 1000;
+      const offsetMs = (offsetIndex - 1) * delayStep;
+      return nextHourWindow + offsetMs;
+    } catch (err) {
+      logger.warn({ err, senderId }, 'Failed to compute atomic reschedule offset, using default timestamp');
+      return nextHourWindow + 1000;
+    }
   }
 }
