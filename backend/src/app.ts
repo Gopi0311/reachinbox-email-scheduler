@@ -15,6 +15,7 @@ export const createApp = (): Express => {
   const app = express();
 
   // Basic security and parsing middleware
+  app.set('trust proxy', 1);
   app.use(
     cors({
       origin: env.FRONTEND_URL,
@@ -41,6 +42,7 @@ export const createApp = (): Express => {
       secret: env.SESSION_SECRET,
       resave: false,
       saveUninitialized: false,
+      proxy: true,
       cookie: {
         secure: env.NODE_ENV === 'production',
         httpOnly: true,
