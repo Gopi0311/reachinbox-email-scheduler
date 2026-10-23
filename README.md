@@ -351,3 +351,8 @@ npm test
 2. **Elasticsearch Fallback**: If Elasticsearch is not started locally, the system automatically falls back to PostgreSQL `ILIKE` queries, ensuring zero disruption during development.
 3. **Session Store**: Session cookies use Redis via `connect-redis` for distributed state across multiple backend instances.
 4. **Rescheduling Window**: When an hourly limit is hit, jobs are delayed to `Math.floor(now / 3600000) * 3600000 + 3600000 + 500ms`, preserving the sequence for the next available sending quota.
+
+## Demo Video
+
+Watch the demo: https://drive.google.com/file/d/1lanpW6o5V0ibYlU9YYpQJ35SlmmRtvtO/view?usp=sharing
+
