@@ -1,6 +1,6 @@
 import { Worker, Job, DelayedError } from 'bullmq';
 import { EMAIL_QUEUE_NAME } from '../queues/email.queue.js';
-import { redisOptions } from '../config/redis.js';
+import { createRedisConnection } from '../config/redis.js';
 import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
 import { EmailJobData } from '../types/index.js';
@@ -46,7 +46,7 @@ export const createEmailWorker = (concurrency = env.WORKER_CONCURRENCY) => {
     EMAIL_QUEUE_NAME,
     processEmailJob,
     {
-      connection: redisOptions,
+      connection: createRedisConnection(),
       concurrency,
       lockDuration: 30000,
     }
